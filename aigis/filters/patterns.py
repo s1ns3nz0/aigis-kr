@@ -395,9 +395,20 @@ PII_INPUT_PATTERNS: list[DetectionPattern] = [
         id="pii_jp_phone",
         name="Japanese Phone Number",
         category="pii_input",
-        pattern=_p(r"(0\d{1,4}[-\s]?\d{1,4}[-\s]?\d{3,4}|0[789]0[-\s]?\d{4}[-\s]?\d{4})"),
+        # Tightened to reject Korean number formats while keeping all JP cases:
+        #   * JP mobile (070/080/090) — unambiguous prefix, KR mobile is 01X.
+        #   * JP landline / freedial — only when accompanied by a JP context
+        #     keyword (電話, TEL, FAX, 連絡先, +81), since 0XX-XXXX-XXXX is
+        #     ambiguous with Korean landline.
+        # Korean phone numbers are caught by pii_ko_phone (filters/patterns.py).
+        pattern=_p(
+            r"(?:0[789]0[-\s]?\d{4}[-\s]?\d{4}"
+            r"|0120[-\s]?\d{3}[-\s]?\d{3}"
+            r"|(?:電話|連絡先|TEL|tel|Tel|FAX|fax|Fax|\+81)"
+            r"\s*[:：\-]?\s*0\d{1,4}[-\s]?\d{1,4}[-\s]?\d{3,4})"
+        ),
         base_score=40,
-        description="Japanese phone number (landline or mobile) detected in input.",
+        description="Japanese phone number (mobile, freedial 0120, or landline with JP keyword) detected in input.",
         owasp_ref="OWASP LLM02: Sensitive Information Disclosure",
         remediation_hint="電話番号がLLMに送信されます。テストデータの場合は 090-0000-0000 のようなダミー番号に置き換えてください。",
     ),
@@ -425,9 +436,14 @@ PII_INPUT_PATTERNS: list[DetectionPattern] = [
         id="pii_jp_postal_code",
         name="Japanese Postal Code",
         category="pii_input",
-        pattern=_p(r"〒?\s?\d{3}[-ー]\d{4}"),
+        # Tightened: require either 〒 mark or 郵便番号 keyword. Bare 3-4 digit
+        # patterns are too noisy — they collide with Korean RRN (6-7), Korean
+        # bank account fragments, and ordinary IDs. The 〒 / keyword anchor
+        # keeps zero-false-positive on Korean text while preserving all
+        # documented JP usage (envelopes, business cards, residential forms).
+        pattern=_p(r"(〒\s?\d{3}[-ー]\d{4}|郵便番号\s*[:：]?\s*\d{3}[-ー]\d{4})"),
         base_score=25,
-        description="Japanese postal code detected in input.",
+        description="Japanese postal code (anchored on 〒 mark or 郵便番号 keyword) detected in input.",
         owasp_ref="OWASP LLM02: Sensitive Information Disclosure",
         remediation_hint="郵便番号単体のリスクは低いですが、住所と組み合わさると個人特定につながります。",
     ),
@@ -1262,6 +1278,104 @@ KOREAN_INJECTION_PATTERNS: list[DetectionPattern] = [
         owasp_ref="OWASP LLM01: Prompt Injection",
         remediation_hint="안전 기능 비활성화를 시도하는 프롬프트 인젝션입니다.",
     ),
+    # ----- PR5: Extended Korean prompt-injection / jailbreak patterns -----
+    # 7 추가 패턴. 모두 ReDoS 가드(_regex_guard.py) 통과 — 그룹 뒤 quantifier
+    # 없음, 단일 alternation, .{0,N} bounded wildcard만 사용.
+    DetectionPattern(
+        id="pi_ko_dan",
+        name="DAN / Jailbreak Persona (Korean)",
+        category="prompt_injection",
+        pattern=_p(
+            r"(지금부터|이제부터|앞으로)\s*(너|당신|네가)는?\s*"
+            r"(dan|do\s+anything\s+now|제한\s*없는\s*ai|자유\s*ai|탈옥|jailbreak)"
+        ),
+        base_score=50,
+        description="Korean variant of DAN / 'do anything now' jailbreak.",
+        owasp_ref="OWASP LLM01: Prompt Injection",
+        remediation_hint="DAN 페르소나 강제 시도입니다. 시스템 페르소나는 시스템 프롬프트에서 정의하세요.",
+    ),
+    DetectionPattern(
+        id="pi_ko_persona_reinforce",
+        name="Persona Reinforcement (Korean)",
+        category="prompt_injection",
+        pattern=_p(
+            r"(절대로?|반드시|무조건)\s*.{0,15}(잊지\s*마|벗어나지\s*마|어기지\s*마|"
+            r"포기하지\s*마|역할에서\s*나오지\s*마|페르소나\s*유지)"
+        ),
+        base_score=45,
+        description="Korean persona-reinforcement injection (lock-in).",
+        owasp_ref="OWASP LLM01: Prompt Injection",
+        remediation_hint="페르소나 고정 강제 시도입니다. 시스템 프롬프트 보호 메커니즘을 검토하세요.",
+    ),
+    DetectionPattern(
+        id="pi_ko_code_interp_bypass",
+        name="Code Interpreter / Tool Bypass (Korean)",
+        category="prompt_injection",
+        pattern=_p(
+            r"(파이썬|python|쉘|bash|shell|코드\s*인터프리터|code\s*interpreter)\s*"
+            r"(으?로|에서)?\s*.{0,15}(직접\s*실행|exec\(|eval\(|system\(|subprocess|"
+            r"우회\s*실행|샌드박스\s*탈출)"
+        ),
+        base_score=55,
+        description="Korean code-interpreter / sandbox-escape injection.",
+        owasp_ref="OWASP LLM06: Excessive Agency",
+        remediation_hint="코드 실행 우회 시도입니다. 인터프리터 권한과 샌드박스 정책을 확인하세요.",
+    ),
+    DetectionPattern(
+        id="pi_ko_prompt_leak",
+        name="Prompt Leak / Original Instructions (Korean)",
+        category="prompt_injection",
+        pattern=_p(
+            r"(처음에?|원래|기본|초기|원본)\s*(받은|받았던|설정된)?\s*"
+            r"(지시|명령|프롬프트|instruction|system\s*prompt)\s*.{0,15}"
+            r"(보여\s*줘|알려\s*줘|출력|공개|reveal|show|print|disclose)"
+        ),
+        base_score=50,
+        description="Korean variant of original-instruction extraction.",
+        owasp_ref="OWASP LLM07: System Prompt Leakage",
+        remediation_hint="원본 시스템 프롬프트 추출 시도입니다.",
+    ),
+    DetectionPattern(
+        id="pi_ko_dev_mode",
+        name="Developer / Debug Mode Activation (Korean)",
+        category="prompt_injection",
+        pattern=_p(
+            r"(개발자\s*모드|디버그\s*모드|debug\s*mode|developer\s*mode|관리자\s*모드|admin\s*mode|maintenance\s*mode)\s*"
+            r"(을|를)?\s*.{0,10}(활성화|켜|enable|on|진입|switch\s*to)"
+        ),
+        base_score=50,
+        description="Korean developer/debug mode jailbreak.",
+        owasp_ref="OWASP LLM01: Prompt Injection",
+        remediation_hint="개발자/디버그 모드 진입 시도입니다. 모델에는 운영 모드 외 없음을 명시하세요.",
+    ),
+    DetectionPattern(
+        id="pi_ko_translate_attack",
+        name="Translate-and-Execute Attack (Korean)",
+        category="prompt_injection",
+        pattern=_p(
+            r"(아래를?|다음을?|이\s*문장을?|이\s*텍스트를?)\s*.{0,15}"
+            r"(영어로|일본어로|중국어로|러시아어로|독일어로|프랑스어로)\s*"
+            r"(번역|translate)\s*.{0,15}(실행|답|응답|수행|execute|reply|respond)"
+        ),
+        base_score=50,
+        description="Korean variant of translate-and-execute prompt injection.",
+        owasp_ref="OWASP LLM01: Prompt Injection",
+        remediation_hint="번역 우회로 안전장치 회피 시도입니다.",
+    ),
+    DetectionPattern(
+        id="pi_ko_hypothetical",
+        name="Hypothetical / Roleplay Bypass (Korean)",
+        category="prompt_injection",
+        pattern=_p(
+            r"(가정해\s*보자|만약\s*에?|상상해\s*봐|hypothetically|imagine|suppose)\s*.{0,30}"
+            r"(제한\s*없는|규칙\s*없는|안전\s*장치\s*없는|jailbroken|no\s*restrictions?|"
+            r"no\s*rules?|unfiltered|악성|불법|harmful|illegal)"
+        ),
+        base_score=45,
+        description="Korean hypothetical-framing jailbreak (roleplay bypass).",
+        owasp_ref="OWASP LLM01: Prompt Injection",
+        remediation_hint="가정·상상 프레이밍으로 안전장치 회피 시도입니다.",
+    ),
 ]
 
 # ---------------------------------------------------------------------------
@@ -1297,6 +1411,100 @@ KOREAN_PII_PATTERNS: list[DetectionPattern] = [
         description="Korean business registration number (사업자등록번호) detected.",
         owasp_ref="OWASP LLM02: Sensitive Information Disclosure",
         remediation_hint="사업자등록번호가 감지되었습니다.",
+    ),
+    # ----- Korean financial / identity PII (PR3 — finance compliance) -----
+    # PIPA 제24조 (고유식별정보) 및 신용정보법, 금융위 AI 가이드 FSC-AI-15 대응
+    DetectionPattern(
+        id="pii_ko_foreign_reg",
+        name="Korean Foreign Resident Registration Number",
+        category="pii_input",
+        # 13-digit form like RRN but the 7th digit is 5/6 (foreigners) or 7/8
+        # (overseas Korean compatriots) — Koreans use 1-4 in that slot.
+        pattern=_p(r"(?<!\d)\d{6}[-\s]?[5-8]\d{6}(?!\d)"),
+        base_score=75,
+        description="Korean foreign resident registration number (외국인등록번호) detected.",
+        owasp_ref="OWASP LLM02: Sensitive Information Disclosure",
+        remediation_hint="외국인등록번호는 PIPA 제24조 고유식별정보로 보호됩니다. "
+        "LLM에 전송하지 마세요.",
+    ),
+    DetectionPattern(
+        id="pii_ko_driver_license",
+        name="Korean Driver License Number",
+        category="pii_input",
+        # 12 digits in the canonical 2-2-6-2 grouping (region-year-serial-check).
+        # Hyphens or single spaces between groups are accepted.
+        pattern=_p(r"(?<!\d)\d{2}[-\s]?\d{2}[-\s]?\d{6}[-\s]?\d{2}(?!\d)"),
+        base_score=55,
+        description="Korean driver license number (운전면허번호) detected.",
+        owasp_ref="OWASP LLM02: Sensitive Information Disclosure",
+        remediation_hint="운전면허번호는 PIPA 제24조 고유식별정보입니다. "
+        "마스킹 후 처리하세요.",
+    ),
+    DetectionPattern(
+        id="pii_ko_passport",
+        name="Korean Passport Number",
+        category="pii_input",
+        # Old format: M/S/D/R + 8 digits. New format (2020-): M + 9 digits.
+        # M=ordinary, S=official, D=diplomatic, R=residence permit.
+        pattern=_p(r"\b[MSDR]\d{8,9}\b"),
+        base_score=60,
+        description="Korean passport number (여권번호) detected.",
+        owasp_ref="OWASP LLM02: Sensitive Information Disclosure",
+        remediation_hint="여권번호는 PIPA 제24조 고유식별정보입니다.",
+    ),
+    DetectionPattern(
+        id="pii_ko_card_bin",
+        name="Korean Credit Card (BIN match)",
+        category="pii_input",
+        # 4-4-4-4 grouped 16-digit number whose BIN matches a Korean issuer.
+        # Common BINs: 9410 (KB), 9419 (Hyundai), 9430 (Shinhan), 4364/4356
+        # (KB/Hyundai), 4564/4565 (Samsung), 3569/3550 (Korean AmEx co-brand).
+        # Luhn validation is left to downstream so the pattern stays ReDoS-safe.
+        pattern=_p(
+            r"\b(9410|9419|9430|4364|4356|4564|4565|3569|3550)"
+            r"[-\s]?\d{4}[-\s]?\d{4}[-\s]?\d{4}\b"
+        ),
+        base_score=70,
+        description="Korean-issuer credit card number (BIN match, 16-digit).",
+        owasp_ref="OWASP LLM02: Sensitive Information Disclosure",
+        remediation_hint="신용카드 번호는 신용정보법·PCI DSS 보호 대상입니다. "
+        "토큰화 후 처리하세요.",
+    ),
+    DetectionPattern(
+        id="pii_ko_bank_account",
+        name="Korean Bank Account Number",
+        category="pii_input",
+        # Conservative pattern: 3-4 hyphenated groups, 9-22 digits total.
+        # Covers KB (6-2-6), Shinhan (3-3-6), Woori (4-3-6), Hana (3-6-3),
+        # NongHyup (3-4-4-1). Spaces not accepted to limit false positives.
+        pattern=_p(r"(?<![\d-])\d{3,6}-\d{2,6}-\d{2,7}(?:-\d{1,6})?(?![\d-])"),
+        base_score=50,
+        description="Korean bank account number (계좌번호) detected.",
+        owasp_ref="OWASP LLM02: Sensitive Information Disclosure",
+        remediation_hint="계좌번호는 신용정보법 보호 대상입니다. "
+        "마스킹 후 처리하세요.",
+    ),
+    DetectionPattern(
+        id="pii_ko_health_insurance",
+        name="Korean Health Insurance Number",
+        category="pii_input",
+        # 1-4-6 grouping. Leading digit 1=workplace, 2=local, 3-7=other.
+        pattern=_p(r"(?<!\d)[1-7][-\s]?\d{4}[-\s]?\d{6}(?!\d)"),
+        base_score=65,
+        description="Korean health insurance card number (건강보험증번호) detected.",
+        owasp_ref="OWASP LLM02: Sensitive Information Disclosure",
+        remediation_hint="건강보험증번호는 PIPA 제23조 민감정보(건강)로 분류됩니다.",
+    ),
+    DetectionPattern(
+        id="pii_ko_vehicle",
+        name="Korean Vehicle Registration Plate",
+        category="pii_input",
+        # Standard plate: 2-3 digits + single Hangul syllable + 4 digits.
+        pattern=_p(r"\b\d{2,3}[가-힣]\d{4}\b"),
+        base_score=40,
+        description="Korean vehicle registration plate (차량번호) detected.",
+        owasp_ref="OWASP LLM02: Sensitive Information Disclosure",
+        remediation_hint="차량번호는 PIPA 제25조 영상정보처리기기 관련 식별정보입니다.",
     ),
 ]
 

@@ -43,7 +43,8 @@
   <a href="#compliance">Compliance</a> &middot;
   <a href="#agent-security">Agent Security</a> &middot;
   <a href="https://github.com/killertcell428/aigis/tree/master/docs">Docs</a> &middot;
-  <a href="README.ja.md">日本語</a>
+  <a href="README.ja.md">日本語</a> &middot;
+  <a href="README.ko.md">한국어</a>
 </p>
 
 <p align="center">

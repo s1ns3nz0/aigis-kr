@@ -7,10 +7,31 @@ import { useLanguage } from "@/contexts/LanguageContext";
 import { t, tx } from "@/lib/translations";
 
 const NAV_ITEMS = [
-  { href: "/challenge", labelEn: "Challenge", labelJa: "チャレンジ" },
-  { href: "/pricing", labelEn: "Pricing", labelJa: "料金" },
-  { href: "/docs", labelEn: "Docs", labelJa: "ドキュメント" },
+  { href: "/challenge", labelEn: "Challenge", labelJa: "チャレンジ", labelKo: "챌린지" },
+  { href: "/pricing", labelEn: "Pricing", labelJa: "料金", labelKo: "요금제" },
+  { href: "/docs", labelEn: "Docs", labelJa: "ドキュメント", labelKo: "문서" },
 ];
+
+function navLabel(
+  item: { labelEn: string; labelJa: string; labelKo: string },
+  lang: "en" | "ja" | "ko",
+): string {
+  if (lang === "ja") return item.labelJa;
+  if (lang === "ko") return item.labelKo;
+  return item.labelEn;
+}
+
+function blogLabel(lang: "en" | "ja" | "ko"): string {
+  if (lang === "ja") return "ブログ";
+  if (lang === "ko") return "블로그";
+  return "Blog";
+}
+
+function languageLabel(lang: "en" | "ja" | "ko"): string {
+  if (lang === "ja") return "言語：";
+  if (lang === "ko") return "언어:";
+  return "Language:";
+}
 
 export default function Navbar() {
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -38,11 +59,11 @@ export default function Navbar() {
                   isActive ? "font-semibold text-guardian-600" : ""
                 }`}
               >
-                {lang === "ja" ? item.labelJa : item.labelEn}
+                {navLabel(item, lang)}
               </Link>
             );
           })}
-          <a href="https://zenn.dev/sharu389no" target="_blank" rel="noopener noreferrer" className="hover:text-guardian-600 transition-colors">{lang === "ja" ? "ブログ" : "Blog"}</a>
+          <a href="https://zenn.dev/sharu389no" target="_blank" rel="noopener noreferrer" className="hover:text-guardian-600 transition-colors">{blogLabel(lang)}</a>
           <a
             href="https://github.com/killertcell428/aigis"
             target="_blank"
@@ -69,6 +90,12 @@ export default function Navbar() {
               className={`px-3 py-1.5 transition-colors ${lang === "ja" ? "bg-guardian-600 text-white" : "text-gray-500 hover:bg-gray-50"}`}
             >
               日本語
+            </button>
+            <button
+              onClick={() => setLang("ko")}
+              className={`px-3 py-1.5 transition-colors ${lang === "ko" ? "bg-guardian-600 text-white" : "text-gray-500 hover:bg-gray-50"}`}
+            >
+              한국어
             </button>
           </div>
 
@@ -104,7 +131,7 @@ export default function Navbar() {
                 }`}
                 onClick={() => setMobileOpen(false)}
               >
-                {lang === "ja" ? item.labelJa : item.labelEn}
+                {navLabel(item, lang)}
               </Link>
             );
           })}
@@ -112,7 +139,7 @@ export default function Navbar() {
           <a href="https://github.com/killertcell428/aigis" target="_blank" rel="noreferrer" className="block text-sm font-medium text-gray-700 py-2">GitHub</a>
           {/* Mobile lang toggle */}
           <div className="flex items-center gap-2 py-2">
-            <span className="text-xs text-gray-500">{lang === "ja" ? "言語：" : "Language:"}</span>
+            <span className="text-xs text-gray-500">{languageLabel(lang)}</span>
             <button
               onClick={() => setLang("en")}
               className={`text-xs px-2 py-1 rounded border ${lang === "en" ? "bg-guardian-600 text-white border-guardian-600" : "border-gray-300 text-gray-600"}`}
@@ -121,6 +148,10 @@ export default function Navbar() {
               onClick={() => setLang("ja")}
               className={`text-xs px-2 py-1 rounded border ${lang === "ja" ? "bg-guardian-600 text-white border-guardian-600" : "border-gray-300 text-gray-600"}`}
             >日本語</button>
+            <button
+              onClick={() => setLang("ko")}
+              className={`text-xs px-2 py-1 rounded border ${lang === "ko" ? "bg-guardian-600 text-white border-guardian-600" : "border-gray-300 text-gray-600"}`}
+            >한국어</button>
           </div>
           <Link href="/#waitlist" className="btn-primary w-full text-center mt-2" onClick={() => setMobileOpen(false)}>{tx(t.nav.startTrial, lang)}</Link>
         </div>

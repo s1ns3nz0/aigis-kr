@@ -86,6 +86,165 @@ class TestPIIInput:
 
 
 # ---------------------------------------------------------------------------
+# Input filter — Korean financial / identity PII (PR3)
+# ---------------------------------------------------------------------------
+class TestKoreanPII:
+    def test_foreign_resident_registration(self):
+        # 7th digit is 5-8 → foreigner (한국인은 1-4)
+        score, level, matched = filter_input("외국인등록번호: 900101-5234567 입니다")
+        assert any(r.rule_id == "pii_ko_foreign_reg" for r in matched)
+        assert level in (RiskLevel.HIGH, RiskLevel.CRITICAL)
+
+    def test_foreign_reg_does_not_trigger_for_korean_citizen_rrn(self):
+        # 7th digit is 1 → Korean citizen (RRN, not foreign reg)
+        score, level, matched = filter_input("주민번호: 900101-1234567")
+        assert any(r.rule_id == "pii_ko_rrn" for r in matched)
+        assert not any(r.rule_id == "pii_ko_foreign_reg" for r in matched)
+
+    def test_driver_license_hyphenated(self):
+        score, level, matched = filter_input("운전면허: 12-34-567890-12")
+        assert any(r.rule_id == "pii_ko_driver_license" for r in matched)
+
+    def test_driver_license_spaced(self):
+        score, level, matched = filter_input("운전면허 12 34 567890 12")
+        assert any(r.rule_id == "pii_ko_driver_license" for r in matched)
+
+    def test_passport_old_format(self):
+        score, level, matched = filter_input("여권: M12345678")
+        assert any(r.rule_id == "pii_ko_passport" for r in matched)
+
+    def test_passport_new_format(self):
+        # 2020+ new format: M + 9 digits
+        score, level, matched = filter_input("여권: M123456789")
+        assert any(r.rule_id == "pii_ko_passport" for r in matched)
+
+    def test_passport_unknown_prefix_letter_not_matched(self):
+        score, level, matched = filter_input("Reference Z12345678")
+        assert not any(r.rule_id == "pii_ko_passport" for r in matched)
+
+    def test_credit_card_kb_bin(self):
+        score, level, matched = filter_input("카드: 9410-1234-5678-9012")
+        assert any(r.rule_id == "pii_ko_card_bin" for r in matched)
+
+    def test_credit_card_samsung_bin(self):
+        score, level, matched = filter_input("Samsung card 4564 1234 5678 9012")
+        assert any(r.rule_id == "pii_ko_card_bin" for r in matched)
+
+    def test_credit_card_unknown_bin_not_matched(self):
+        # Non-Korean BIN — must NOT trigger the KR-specific rule.
+        score, level, matched = filter_input("card 1234-5678-9012-3456")
+        assert not any(r.rule_id == "pii_ko_card_bin" for r in matched)
+
+    def test_bank_account_3_3_6(self):
+        score, level, matched = filter_input("신한은행 110-123-456789")
+        assert any(r.rule_id == "pii_ko_bank_account" for r in matched)
+
+    def test_bank_account_3_4_4_1(self):
+        score, level, matched = filter_input("농협 356-1234-1234-12")
+        assert any(r.rule_id == "pii_ko_bank_account" for r in matched)
+
+    def test_health_insurance_hyphenated(self):
+        score, level, matched = filter_input("건강보험증 1-1234-567890")
+        assert any(r.rule_id == "pii_ko_health_insurance" for r in matched)
+
+    def test_vehicle_plate(self):
+        score, level, matched = filter_input("차량번호 12가3456 사고")
+        assert any(r.rule_id == "pii_ko_vehicle" for r in matched)
+
+    def test_vehicle_plate_3_digit_prefix(self):
+        score, level, matched = filter_input("123나4567")
+        assert any(r.rule_id == "pii_ko_vehicle" for r in matched)
+
+    def test_pure_japanese_text_does_not_trigger_korean_pii(self):
+        # FP regression guard: pure Japanese input must not trigger any
+        # Korean-specific rule. (Generic Japanese rules may still fire —
+        # that's expected.)
+        score, level, matched = filter_input("今日の天気はいいですね。")
+        ko_specific = [r for r in matched if r.rule_id.startswith("pii_ko_")]
+        assert ko_specific == [], f"unexpected KR PII hits: {ko_specific}"
+
+    def test_plain_english_does_not_trigger_korean_pii(self):
+        score, level, matched = filter_input("Hello world, this is a normal sentence.")
+        ko_specific = [r for r in matched if r.rule_id.startswith("pii_ko_")]
+        assert ko_specific == []
+
+
+# ---------------------------------------------------------------------------
+# JP / KR PII boundary — tighten JP patterns to reject KR formats
+# Regression guard for the FP issue documented in MVR status memory.
+# ---------------------------------------------------------------------------
+class TestJPKRBoundary:
+    """Japanese PII patterns must not fire on Korean input formats.
+
+    Before the tightening, pii_jp_phone matched any string starting with 0
+    (catching Korean mobile 01X-XXXX-XXXX as a JP landline) and
+    pii_jp_postal_code matched bare 3-4 digit groups (catching parts of
+    Korean RRN / bank accounts). Both are now anchored on JP-specific cues.
+    """
+
+    # ---- JP patterns must still match all documented JP usage ----
+    def test_jp_mobile_still_matches(self):
+        _, _, matched = filter_input("電話番号は090-1234-5678です")
+        assert any(r.rule_id == "pii_jp_phone" for r in matched)
+
+    def test_jp_mobile_080_still_matches(self):
+        _, _, matched = filter_input("Phone: 080-9999-1234")
+        assert any(r.rule_id == "pii_jp_phone" for r in matched)
+
+    def test_jp_landline_with_tel_keyword_matches(self):
+        _, _, matched = filter_input("TEL: 03-1234-5678")
+        assert any(r.rule_id == "pii_jp_phone" for r in matched)
+
+    def test_jp_freedial_matches(self):
+        _, _, matched = filter_input("お問い合わせ: 0120-123-456")
+        assert any(r.rule_id == "pii_jp_phone" for r in matched)
+
+    def test_jp_postal_with_mark_matches(self):
+        _, _, matched = filter_input("〒100-0001 東京都千代田区")
+        assert any(r.rule_id == "pii_jp_postal_code" for r in matched)
+
+    def test_jp_postal_with_keyword_matches(self):
+        _, _, matched = filter_input("郵便番号: 100-0001")
+        assert any(r.rule_id == "pii_jp_postal_code" for r in matched)
+
+    # ---- KR inputs must NOT trigger JP patterns ----
+    def test_kr_mobile_does_not_trigger_jp_phone(self):
+        _, _, matched = filter_input("내 휴대폰 010-1234-5678")
+        assert not any(r.rule_id == "pii_jp_phone" for r in matched)
+
+    def test_kr_rrn_does_not_trigger_jp_phone(self):
+        _, _, matched = filter_input("주민번호 900101-1234567")
+        assert not any(r.rule_id == "pii_jp_phone" for r in matched)
+
+    def test_kr_credit_card_does_not_trigger_jp_phone(self):
+        _, _, matched = filter_input("내 카드번호 9410-1234-5678-9012")
+        assert not any(r.rule_id == "pii_jp_phone" for r in matched)
+
+    def test_kr_bank_account_does_not_trigger_jp_postal(self):
+        _, _, matched = filter_input("신한 계좌 110-123-456789")
+        assert not any(r.rule_id == "pii_jp_postal_code" for r in matched)
+
+    def test_kr_landline_without_jp_context_does_not_trigger_jp_phone(self):
+        # KR landline (02-XXXX-XXXX) shares format with JP landline; without
+        # JP keyword anchor it must default to "Korean" attribution.
+        _, _, matched = filter_input("서울 사무실 02-1234-5678")
+        assert not any(r.rule_id == "pii_jp_phone" for r in matched)
+
+    def test_kr_landline_with_tel_keyword_does_trigger_jp_phone(self):
+        # Conservative trade-off: when the user explicitly types "TEL:" we
+        # treat it as a JP landline reference even though the digits could
+        # be Korean. The match is benign in this case (still PII) and we
+        # prefer not to over-engineer the keyword set.
+        _, _, matched = filter_input("TEL: 02-1234-5678")
+        assert any(r.rule_id == "pii_jp_phone" for r in matched)
+
+    def test_bare_postal_like_digits_in_korean_text(self):
+        # "100-0001" without 〒 or 郵便番号 keyword must NOT trigger.
+        _, _, matched = filter_input("우리 가게 매장 코드는 100-0001 입니다")
+        assert not any(r.rule_id == "pii_jp_postal_code" for r in matched)
+
+
+# ---------------------------------------------------------------------------
 # Messages filter
 # ---------------------------------------------------------------------------
 class TestMessagesFilter:

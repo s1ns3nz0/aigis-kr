@@ -19,6 +19,9 @@ Usage:
     aig maintenance              # Rotate and compress old logs
     aig mcp '{"name":"add",...}'  # Scan MCP tool definition for poisoning
     aig mcp --file tools.json    # Scan MCP tools from JSON file
+    aig compliance                # Show combined JP+KR compliance summary
+    aig compliance --jurisdiction kr           # Korean regulation mapping only
+    aig compliance --jurisdiction kr --json    # Machine-readable full report
 """
 
 import argparse
@@ -266,6 +269,29 @@ def main(argv: list[str] | None = None) -> int:
     serve_p.add_argument("--host", default="0.0.0.0", help="Bind host (default: 0.0.0.0)")
     serve_p.add_argument("--port", type=int, default=8080, help="Bind port (default: 8080)")
 
+    # aig compliance — multi-jurisdiction regulation mapping (jp / kr / all)
+    comp_p = sub.add_parser(
+        "compliance",
+        help="Show compliance mapping for a jurisdiction (jp / kr / all)",
+    )
+    comp_p.add_argument(
+        "--jurisdiction",
+        choices=["jp", "kr", "all"],
+        default="all",
+        help="Which jurisdiction to report on (default: all)",
+    )
+    comp_p.add_argument(
+        "--json",
+        dest="json_output",
+        action="store_true",
+        help="Emit the full item list as JSON instead of a printed summary",
+    )
+    comp_p.add_argument(
+        "--summary",
+        action="store_true",
+        help="Print just the coverage summary (default unless --json)",
+    )
+
     args = parser.parse_args(argv)
 
     if args.command == "init":
@@ -296,9 +322,58 @@ def main(argv: list[str] | None = None) -> int:
         return cmd_benchmark(args)
     elif args.command == "serve":
         return cmd_serve(args)
+    elif args.command == "compliance":
+        return cmd_compliance(args)
     else:
         parser.print_help()
         return 0
+
+
+def cmd_compliance(args: argparse.Namespace) -> int:
+    """Show compliance mapping for the requested jurisdiction."""
+    from aigis.compliance_registry import (
+        get_compliance_report,
+        get_compliance_summary,
+        list_jurisdictions,
+    )
+    from aigis.i18n import t
+
+    jurisdiction = args.jurisdiction
+
+    if args.json_output:
+        payload = {
+            "jurisdiction": jurisdiction,
+            "summary": get_compliance_summary(jurisdiction),
+            "items": get_compliance_report(jurisdiction),
+        }
+        print(json.dumps(payload, ensure_ascii=False, indent=2, default=str))
+        return 0
+
+    summary = get_compliance_summary(jurisdiction)
+    label = t(f"cli.compliance.label.{jurisdiction}")
+    print(t("cli.compliance.header", label=label))
+    print("=" * 60)
+    print(f"  {t('cli.compliance.total'):20s} : {summary['total_requirements']}")
+    print(f"  {t('cli.compliance.covered'):20s} : {summary['covered']}")
+    print(f"  {t('cli.compliance.partial'):20s} : {summary['partial']}")
+    print(f"  {t('cli.compliance.not_covered'):20s} : {summary['not_covered']}")
+    print(f"  {t('cli.compliance.user_responsibility'):20s} : {summary['user_responsibility']}")
+    print(f"  {t('cli.compliance.coverage_rate'):20s} : {summary['coverage_rate']}%")
+    print()
+    print(f"  {t('cli.compliance.by_regulation')}")
+    for reg, stats in summary["by_regulation"].items():
+        cov = stats["covered"]
+        part = stats["partial"]
+        nc = stats["not_covered"]
+        tot = stats["total"]
+        print(f"    [{cov}+{part}P/{tot} (nc={nc})] {reg}")
+    print()
+    print(f"  {t('cli.compliance.tip_json', jurisdiction=jurisdiction)}")
+    if jurisdiction == "all":
+        print(
+            f"       {t('cli.compliance.supported', jurisdictions=', '.join(list_jurisdictions()))}"
+        )
+    return 0
 
 
 def cmd_serve(args: argparse.Namespace) -> int:

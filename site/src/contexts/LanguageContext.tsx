@@ -13,7 +13,7 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     const saved = localStorage.getItem("aig-lang") as Lang | null;
-    if (saved === "ja" || saved === "en") setLangState(saved);
+    if (saved === "ja" || saved === "en" || saved === "ko") setLangState(saved);
   }, []);
 
   const setLang = (l: Lang) => {

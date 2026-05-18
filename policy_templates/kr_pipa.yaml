@@ -1,0 +1,92 @@
+# Aigis Policy — 한국 개인정보보호법 (PIPA)
+#
+# Use this for:
+#   - 한국 내 개인정보를 처리하는 모든 산업의 AI 시스템(범용).
+#   - 챗봇·고객 데이터 분석·HR·마케팅 자동화·교육·헬스케어 등 업종 무관.
+#   - 금융 도메인은 [[kr_finance.yaml]]을 추가로 결합해 사용.
+#
+# Regulatory context:
+#   - 개인정보 보호법(PIPA), 2024년 3월 시행 개정안 포함.
+#   - 개인정보의 안전성 확보조치 기준 (개인정보보호위원회 고시 2023-6호).
+#   - 정보통신망법 — 침해사고 대응(제48조의3, 24시간 내 신고).
+#   - 핵심 신설 조항:
+#       · 제37조의2 자동화된 결정에 대한 정보주체의 권리 (거부·설명요구권)
+#       · 제28조의8 개인정보의 국외이전 (적정성 결정 도입)
+#       · 제24조 고유식별정보(주민·외국인등록·여권·운전면허) 처리 제한
+#       · 제23조 민감정보(건강·종교·정치·노조 등) 처리 제한
+#   - 위반 시: 매출액 3% 과징금, 형사처벌(주민등록번호 유출은 가중 처벌).
+#
+# Threat model:
+#   - 목적외 이용·제3자 제공: 동의 범위를 벗어난 데이터 활용·외부 제공.
+#   - 가명정보 재식별: 가명처리 결과를 다른 정보와 결합해 개인을 특정.
+#   - 정보주체 권리 거부: 열람·정정·삭제·처리정지 요구를 무시하라는 지시.
+#   - 국외이전 우회: 적정성 결정 없는 국외 서버로 개인정보 송신.
+#   - 자동화 결정 설명 거부: AI 결정의 사유·근거 공개 거부(제37조의2 위반).
+#   - 민감정보 무단 수집·처리: 별도 동의 없이 건강·종교·정치 정보 처리.
+#   - 유출 통지 은폐: 72시간 내 정보주체 통지·보호위/KISA 신고 회피.
+#   - 고유식별정보 입력은 patterns.py의 pii_ko_rrn / pii_ko_foreign_reg /
+#     pii_ko_passport / pii_ko_driver_license가 사전 차단. 이 정책은
+#     처리·제공·결합 의도 자체를 차단.
+#
+# 임계값 근거: PIPA 위반은 형사처벌 가능 영역이라 strict(60)으로 설정.
+#
+name: kr_pipa
+auto_block_threshold: 60
+auto_allow_threshold: 20
+
+custom_rules:
+  # PIPA 제17조 / 제18조 — 목적외 이용·제3자 제공 지시.
+  - id: kr_pipa_purpose_violation
+    name: 개인정보 목적외 이용 / 제3자 제공
+    pattern: "(개인\\s*정보|고객\\s*정보|회원\\s*정보)\\s*.{0,25}(동의\\s*없이|무단으로|허가\\s*없이)\\s*.{0,15}(공유|제공|판매|이전|전달|share|sell|transfer)"
+    score_delta: 60
+    enabled: true
+
+  # PIPA 제28조의5 — 가명정보 재식별 시도.
+  - id: kr_pipa_pseudonym_reidentify
+    name: 가명정보 재식별 시도
+    pattern: "(가명\\s*정보|가명\\s*처리|de[- ]?identified|pseudonymi[sz]ed)\\s*.{0,30}(원래\\s*이름|실제\\s*누구|역\\s*추적|원본\\s*복원|재\\s*식별|reidentify|re[- ]?identify)"
+    score_delta: 65
+    enabled: true
+
+  # PIPA 제35조~제37조 — 정보주체 권리 행사 거부 지시.
+  - id: kr_pipa_data_subject_rights_denial
+    name: 정보주체 권리(열람·정정·삭제·처리정지) 거부
+    pattern: "(열람\\s*요구|정정\\s*요구|삭제\\s*요구|처리\\s*정지\\s*요구|개인\\s*정보\\s*삭제)\\s*.{0,20}(거부|무시|차단|지연|deny|ignore|reject)"
+    score_delta: 55
+    enabled: true
+
+  # PIPA 제28조의8 — 국외이전 우회.
+  - id: kr_pipa_cross_border_unauth
+    name: 개인정보 국외이전 동의 우회
+    pattern: "(국외\\s*이전|해외\\s*서버|해외\\s*리전|us[- ]?east|us[- ]?west|eu[- ]?central|일본\\s*서버|중국\\s*서버|미국\\s*서버|러시아\\s*서버|동남아\\s*서버)\\s*.{0,30}(동의\\s*없이|동의\\s*우회|적정성\\s*결정\\s*없이|미\\s*동의)"
+    score_delta: 60
+    enabled: true
+
+  # PIPA 제37조의2 — 자동화 결정 설명 거부 (2024 신설).
+  - id: kr_pipa_auto_decision_refuse_explain
+    name: 자동화 결정 설명 · 거부권 무력화
+    pattern: "(자동\\s*화|ai|인공\\s*지능)\\s*(결정|판단|평가|의사\\s*결정)\\s*.{0,30}(설명\\s*하지\\s*마|설명\\s*거부|이유\\s*비공개|거부권\\s*무시|이의\\s*제기\\s*차단)"
+    score_delta: 60
+    enabled: true
+
+  # PIPA 제23조 — 민감정보 처리 (별도 동의 / 법령 근거 필요).
+  - id: kr_pipa_sensitive_info_unauth
+    name: 민감정보 무단 수집 · 처리
+    pattern: "(병명|진단명|병력|치료\\s*이력|종교|정치\\s*성향|정당\\s*가입|성적\\s*지향|노조\\s*가입|범죄\\s*경력|유전\\s*정보|건강\\s*정보)\\s*.{0,25}(수집|저장|기록|분석|프로파일링|profiling|collect)"
+    score_delta: 60
+    enabled: true
+
+  # PIPA 제34조 — 유출 통지·신고 의무 회피(72시간/1천명 기준).
+  - id: kr_pipa_breach_notification_suppression
+    name: 개인정보 유출 통지 은폐
+    pattern: "(개인\\s*정보\\s*유출|개인\\s*정보\\s*누출|데이터\\s*유출|breach|leak)\\s*.{0,25}(통지\\s*하지|신고\\s*하지|숨겨|은폐|보고\\s*안|숨기고|conceal|suppress|hide)"
+    score_delta: 65
+    enabled: true
+
+  # PIPA 제26조 — 처리위탁 미고지 (수탁자 명시 의무 회피).
+  - id: kr_pipa_outsource_undisclosed
+    name: 처리위탁 미고지
+    pattern: "(개인\\s*정보\\s*위탁|처리\\s*위탁|수탁\\s*자)\\s*.{0,25}(고지\\s*하지|공개\\s*하지|숨겨|미\\s*공개|undisclosed)"
+    score_delta: 50
+    enabled: true

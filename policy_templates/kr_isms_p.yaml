@@ -1,0 +1,92 @@
+# Aigis Policy — ISMS-P 인증 통제 (Korea Information Security & PII MS)
+#
+# Use this for:
+#   - ISMS-P(정보보호 및 개인정보보호 관리체계) 인증을 준비·유지하는 조직의
+#     AI 시스템(개발·운영·운영 보안 통제 자동 점검).
+#   - 정보통신망법 제47조 ISMS 의무 대상 정보통신서비스 제공자.
+#   - 공공기관·금융기관·의료기관 등 정보보호 관리체계 운영 조직.
+#
+# Regulatory context:
+#   - ISMS-P 인증기준 (KISA, 2023년 개정) — 102개 통제항목 중 AI 시스템에
+#     직접 적용되는 통제 분야:
+#       · 2.6  접근 통제 (계정·권한·인증·승인)
+#       · 2.7  암호 통제 (저장·전송 암호화, 키 관리)
+#       · 2.8  정보시스템 도입 및 개발 보안 (보안 요구사항·시험)
+#       · 2.9  시스템 및 서비스 운영관리 (변경관리·로그관리)
+#       · 2.10 시스템 및 서비스 보안관리 (침입탐지·패치·악성코드)
+#       · 2.11 사고 예방 및 대응 (취약점 점검·이상행위 분석·사고 대응)
+#       · 2.12 재해복구 (BCP·DR)
+#   - 정보통신망법 제47조 ISMS 인증, 제48조의3 침해사고 대응(24시간 신고).
+#   - 개인정보 영역은 PIPA 매핑이므로 [[kr_pipa.yaml]] 추가 적용 권장.
+#
+# Threat model:
+#   - 접근통제 우회: AI 에이전트가 권한 상승·sudo·root 권한 획득 시도.
+#   - 감사 로그 변조: 사고 흔적을 가리려 로그 삭제·조작 지시.
+#   - 암호화 우회: 평문 저장·전송, 암호 모듈 비활성화 지시.
+#   - 보안 패치 회피: CVE·취약점 인지 후에도 패치 미적용·임시 비활성화.
+#   - 외부자 보안 통제 누락: 클라우드·SaaS·외부 AI 위탁 시 통제 우회.
+#   - 침해사고 은폐: KISA 신고 회피, 사고 대응 절차 무력화.
+#   - 개발보안 우회: 코드 리뷰·보안 테스트·SAST/DAST 건너뛰기.
+#
+# 임계값 근거: ISMS-P 인증 유지에는 통제 운영 증적이 핵심이라 strict(55).
+#
+name: kr_isms_p
+auto_block_threshold: 55
+auto_allow_threshold: 20
+
+custom_rules:
+  # ISMS-P 2.6 — 접근 통제 우회 (권한 상승·인증 우회).
+  - id: kr_isms_access_control_bypass
+    name: 접근 통제 / 인증 우회
+    pattern: "(권한\\s*상승|권한\\s*우회|인증\\s*우회|승인\\s*없이|관리자\\s*권한\\s*획득|root\\s*권한|sudo\\s+|privilege\\s+escalation|auth\\s+bypass)"
+    score_delta: 55
+    enabled: true
+
+  # ISMS-P 2.9·2.11 — 감사 로그 / history 변조.
+  - id: kr_isms_audit_log_tamper
+    name: 감사 로그 / 이력 변조
+    pattern: "(감사\\s*로그|access\\s*log|audit\\s*log|history)\\s*.{0,20}(삭제|조작|위조|변조|초기화|truncate|tamper|wipe|delete|clear)"
+    score_delta: 65
+    enabled: true
+
+  # ISMS-P 2.7 — 암호화 우회.
+  - id: kr_isms_encryption_bypass
+    name: 암호화 통제 우회
+    pattern: "(암호화|encryption|tls|ssl|hsm)\\s*.{0,20}(끄|비활성화|해제|우회|disable|bypass|turn\\s+off)"
+    score_delta: 60
+    enabled: true
+
+  # ISMS-P 2.7 — 평문 저장·전송 지시.
+  - id: kr_isms_plaintext_handling
+    name: 비밀 / 자격증명 평문 저장 · 전송
+    pattern: "(비밀\\s*번호|패스워드|password|api\\s*key|토큰|token|개인\\s*키|private\\s+key)\\s*.{0,20}(평문\\s*저장|평문\\s*전송|cleartext|plaintext|in\\s+the\\s+clear|로그\\s*에\\s*기록)"
+    score_delta: 60
+    enabled: true
+
+  # ISMS-P 2.10 — 보안 패치 회피.
+  - id: kr_isms_patch_avoidance
+    name: 보안 패치 / 취약점 조치 회피
+    pattern: "(보안\\s*패치|security\\s+patch|cve[- ]?\\d|취약점|vulnerability)\\s*.{0,25}(미\\s*적용|건너\\s*뛰|무시|미\\s*조치|skip|ignore|delay)"
+    score_delta: 50
+    enabled: true
+
+  # ISMS-P 2.10 — 외부자(클라우드·SaaS·외부 AI) 통제 누락.
+  - id: kr_isms_external_outsource_undisclosed
+    name: 외부자 보안 통제 누락 (위탁 미고지)
+    pattern: "(외부\\s*ai|외부\\s*llm|외부\\s*sa{1,2}s|클라우드\\s*위탁|cloud\\s+outsource|third[- ]?party)\\s*.{0,30}(고지\\s*없이|승인\\s*없이|평가\\s*없이|기록\\s*없이|미\\s*통보|undisclosed)"
+    score_delta: 55
+    enabled: true
+
+  # ISMS-P 2.11 / 정보통신망법 제48조의3 — 침해사고 대응 은폐.
+  - id: kr_isms_incident_response_suppression
+    name: 침해사고 보고 / 대응 은폐
+    pattern: "(침해\\s*사고|보안\\s*사고|security\\s+incident|breach)\\s*.{0,25}(보고\\s*하지|kisa\\s*신고\\s*하지|숨겨|은폐|보고\\s*안|conceal|suppress)"
+    score_delta: 65
+    enabled: true
+
+  # ISMS-P 2.8 — 개발보안 통제 우회 (코드 리뷰·보안 테스트).
+  - id: kr_isms_dev_security_bypass
+    name: 개발보안 통제 우회 (리뷰 · 보안 테스트)
+    pattern: "(코드\\s*리뷰|code\\s+review|sast|dast|보안\\s*테스트|security\\s+test|침투\\s*시험|pen\\s*test)\\s*.{0,20}(스킵|건너\\s*뛰|생략|패스|skip|omit|bypass)"
+    score_delta: 50
+    enabled: true

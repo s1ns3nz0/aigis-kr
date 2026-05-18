@@ -38,6 +38,7 @@ from typing import Any
 
 from aigis import __version__ as aigis_version
 from aigis.guard import Guard
+from aigis.i18n import Lang, detect_lang, parse_accept_language, t
 from aigis.types import CheckResult
 
 logger = logging.getLogger("aigis.server")
@@ -74,22 +75,37 @@ class AigisHandler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(payload)
 
+    def _resolve_lang(self) -> Lang:
+        """Pick the response language from Accept-Language, falling back to env."""
+        header_lang = parse_accept_language(self.headers.get("Accept-Language"))
+        return header_lang if header_lang else detect_lang()
+
     def _read_json(self) -> dict[str, Any] | None:
+        lang = self._resolve_lang()
         length = int(self.headers.get("Content-Length", "0") or "0")
         if length <= 0:
-            self._send_json(HTTPStatus.BAD_REQUEST, {"error": "missing body"})
+            self._send_json(HTTPStatus.BAD_REQUEST, {"error": t("server.error.missing_body", lang)})
             return None
         if length > _MAX_BODY_BYTES:
-            self._send_json(HTTPStatus.REQUEST_ENTITY_TOO_LARGE, {"error": "body too large"})
+            self._send_json(
+                HTTPStatus.REQUEST_ENTITY_TOO_LARGE,
+                {"error": t("server.error.body_too_large", lang)},
+            )
             return None
         raw = self.rfile.read(length)
         try:
             data = json.loads(raw)
         except json.JSONDecodeError as exc:
-            self._send_json(HTTPStatus.BAD_REQUEST, {"error": f"invalid JSON: {exc}"})
+            self._send_json(
+                HTTPStatus.BAD_REQUEST,
+                {"error": t("server.error.invalid_json", lang, detail=str(exc))},
+            )
             return None
         if not isinstance(data, dict):
-            self._send_json(HTTPStatus.BAD_REQUEST, {"error": "expected JSON object"})
+            self._send_json(
+                HTTPStatus.BAD_REQUEST,
+                {"error": t("server.error.expected_object", lang)},
+            )
             return None
         return data
 
@@ -111,9 +127,14 @@ class AigisHandler(BaseHTTPRequestHandler):
                 },
             )
             return
-        self._send_json(HTTPStatus.NOT_FOUND, {"error": f"unknown path: {self.path}"})
+        lang = self._resolve_lang()
+        self._send_json(
+            HTTPStatus.NOT_FOUND,
+            {"error": t("server.error.unknown_path", lang, path=self.path)},
+        )
 
     def do_POST(self) -> None:  # noqa: N802
+        lang = self._resolve_lang()
         data = self._read_json()
         if data is None:
             return
@@ -121,23 +142,35 @@ class AigisHandler(BaseHTTPRequestHandler):
             if self.path == "/v1/check/input":
                 text = data.get("text")
                 if not isinstance(text, str):
-                    self._send_json(HTTPStatus.BAD_REQUEST, {"error": "text must be string"})
+                    self._send_json(
+                        HTTPStatus.BAD_REQUEST,
+                        {"error": t("server.error.text_must_be_string", lang)},
+                    )
                     return
                 result = self.guard.check_input(text)
             elif self.path == "/v1/check/output":
                 text = data.get("text")
                 if not isinstance(text, str):
-                    self._send_json(HTTPStatus.BAD_REQUEST, {"error": "text must be string"})
+                    self._send_json(
+                        HTTPStatus.BAD_REQUEST,
+                        {"error": t("server.error.text_must_be_string", lang)},
+                    )
                     return
                 result = self.guard.check_output(text)
             elif self.path == "/v1/check/messages":
                 messages = data.get("messages")
                 if not isinstance(messages, list):
-                    self._send_json(HTTPStatus.BAD_REQUEST, {"error": "messages must be list"})
+                    self._send_json(
+                        HTTPStatus.BAD_REQUEST,
+                        {"error": t("server.error.messages_must_be_list", lang)},
+                    )
                     return
                 result = self.guard.check_messages(messages)
             else:
-                self._send_json(HTTPStatus.NOT_FOUND, {"error": f"unknown path: {self.path}"})
+                self._send_json(
+                    HTTPStatus.NOT_FOUND,
+                    {"error": t("server.error.unknown_path", lang, path=self.path)},
+                )
                 return
         except Exception as exc:
             logger.exception("scan failed")

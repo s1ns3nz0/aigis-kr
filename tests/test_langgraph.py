@@ -124,7 +124,15 @@ class TestGuardNodeRaiseOnBlock:
             self.node(state)
 
     def test_pii_critical_raises(self):
-        state = _state("My credit card is 4532015112830366 exp 12/25 CVV 123")
+        # Use a JP MyNumber (12 digits, base_score=70) + bare credit card
+        # (base_score=70) — same category caps at 2× the larger base score,
+        # producing a CRITICAL verdict regardless of policy threshold.
+        # Earlier this test relied on pii_jp_phone matching inside the card
+        # digits, which was a false-positive — see TestJPKRBoundary in
+        # tests/test_filters.py.
+        state = _state(
+            "マイナンバー: 1234 5678 9012, credit card: 4532015112830366"
+        )
         with pytest.raises(GuardianBlockedError):
             self.node(state)
 

@@ -1,0 +1,96 @@
+# Aigis Policy — 한국 금융권 (Korea Finance)
+#
+# Use this for:
+#   - 한국 금융기관(은행·증권·보험·카드·캐피탈)의 챗봇·고객응대 AI
+#   - 신용평가·대출심사·자산운용·FDS 등 의사결정 보조 AI
+#   - 금융권 내부 RAG / 코드 어시스턴트가 금융 데이터를 다루는 환경
+#
+# Regulatory context:
+#   - 신용정보의 이용 및 보호에 관한 법률(신용정보법) — 개인신용정보 처리,
+#     누설 통지(제39조의4), 자동화평가 결과 설명·이의제기권(제36조의2),
+#     마이데이터 전송요구권(제33조의2).
+#   - 전자금융감독규정 — 정보처리시스템 보호조치(제13조), 전자금융사고 보고
+#     (제73조, 영업일 익일까지), 외부 전산자원 이용(제14조의2, 클라우드·제3자 AI).
+#   - 금융분야 AI 가이드라인 (금융위 2021 / 2024 강화) — 데이터 적정성,
+#     모형 위험관리·모니터링, 설명가능성, 차별 방지, 인적개입.
+#   - 자본시장법 — 미공개중요정보 이용(제174조), 시세조종(제176조).
+#   - 개인정보보호법(PIPA) — 일반 PII 처리는 [[kr_pipa.yaml]] 참조.
+#
+# Threat model:
+#   - 신용정보 유출: 개인신용정보(신용평점·연체·대출잔액·카드한도)를 LLM 응답
+#     이나 외부 도구로 빼내려는 시도.
+#   - KYC/AML/FDS 우회: 본인확인·자금세탁방지·이상거래탐지 단계를 건너뛰게
+#     하는 지시.
+#   - 시세조종·내부자거래: 미공개정보 이용·선행매매·통정매매 등 자본시장
+#     교란 행위 지시.
+#   - 마이데이터 동의 우회: 정보주체 동의 없이 신용정보 전송·결합.
+#   - 감독당국 보고 은폐: 금감원·금융위 보고 의무 회피 시도.
+#   - 자동화 결정 설명 거부: 신용평가·대출거절 사유 설명을 거부하라는 지시
+#     (신용정보법 제36조의2 위반).
+#   - 한국 금융 식별정보 사전 검출은 patterns.py의 pii_ko_card_bin /
+#     pii_ko_bank_account / pii_ko_rrn 등이 담당. 이 정책은 의도 기반 차단.
+#
+# 임계값 근거: 금융 정보는 신용정보법·전자금융감독규정상 즉시 보고·과징금
+# 대상이므로 strict(55)로 설정.
+#
+name: kr_finance
+auto_block_threshold: 55
+auto_allow_threshold: 20
+
+custom_rules:
+  # 신용정보법 — 개인신용정보 유출/송신 시도.
+  # 평면 alternation만 사용해 ReDoS 가드(_regex_guard.py)를 통과.
+  - id: kr_fin_credit_info_leak
+    name: 개인신용정보 유출 시도
+    pattern: "(신용평점|신용등급|연체정보|대출잔액|카드한도|카드사용내역|소득정보|재산정보|개인신용정보)\\s*.{0,20}(보여\\s*줘|알려\\s*줘|전송|업로드|복사|내보내|export|leak)"
+    score_delta: 55
+    enabled: true
+
+  # 신용정보법 / 전자금융감독규정 — KYC·AML·FDS 우회.
+  - id: kr_fin_kyc_aml_bypass
+    name: KYC / AML / FDS 우회 시도
+    pattern: "(본인\\s*확인|실명\\s*확인|kyc|aml|fds|이상거래\\s*탐지|자금세탁\\s*방지)\\s*.{0,15}(스킵|건너\\s*뛰|우회|무시|비활성화|disable|bypass|skip)"
+    score_delta: 65
+    enabled: true
+
+  # 자본시장법 제174조·제176조 — 시세조종·내부자거래.
+  - id: kr_fin_market_manipulation
+    name: 시세조종 · 내부자거래 지시
+    pattern: "(미공개\\s*중요\\s*정보|미공개\\s*정보|내부자\\s*거래|선행\\s*매매|통정\\s*매매|가장\\s*매매|시세\\s*조종|pump\\s+and\\s+dump|front[- ]?running|insider\\s+trading|wash\\s+trade)"
+    score_delta: 70
+    enabled: true
+
+  # 신용정보법 제33조의2 — 마이데이터 동의 우회.
+  - id: kr_fin_mydata_bypass
+    name: 마이데이터 동의 우회
+    pattern: "(마이데이터|전송\\s*요구|개인신용정보\\s*전송)\\s*.{0,25}(동의\\s*없이|동의\\s*우회|미\\s*동의|동의\\s*안\\s*받|동의\\s*생략)"
+    score_delta: 60
+    enabled: true
+
+  # 전자금융감독규정 제73조 — 전자금융사고 보고 은폐.
+  - id: kr_fin_supervisor_report_suppression
+    name: 감독당국 보고 은폐
+    pattern: "(금감원|금융감독원|금융위|금융위원회|fsc|fss)\\s*.{0,25}(보고\\s*하지\\s*마|보고\\s*안|숨겨|은폐|보고\\s*생략|suppress|conceal)"
+    score_delta: 65
+    enabled: true
+
+  # 신용정보법 제36조의2 — 자동화평가 결과 설명 거부.
+  - id: kr_fin_auto_decision_explain_refuse
+    name: 자동화 신용평가 설명 거부 지시
+    pattern: "(신용\\s*평가|대출\\s*거절|보험\\s*인수\\s*거절|대출\\s*심사)\\s*.{0,30}(설명\\s*하지\\s*마|이유\\s*없이|근거\\s*비공개|설명\\s*거부|설명\\s*생략)"
+    score_delta: 55
+    enabled: true
+
+  # 전자금융감독규정 제14조의2 — 미인가 외부 AI 위탁.
+  - id: kr_fin_unauth_external_llm
+    name: 미인가 외부 AI 서비스 위탁
+    pattern: "(openai|anthropic|gemini|claude|gpt|chatgpt|외부\\s*llm|해외\\s*ai)\\s*.{0,30}(고객\\s*정보|개인\\s*신용\\s*정보|계좌\\s*정보|주민\\s*번호)\\s*.{0,20}(보내|전송|업로드|send|upload|transfer)"
+    score_delta: 60
+    enabled: true
+
+  # 자금세탁방지 — 송금 패턴 분할·차명 거래.
+  - id: kr_fin_layering_hint
+    name: 자금세탁(레이어링) 의심 지시
+    pattern: "(차명\\s*계좌|차명\\s*거래|쪼개\\s*기\\s*송금|분할\\s*송금|레이어링|layering|smurfing|structuring|구조화\\s*거래)"
+    score_delta: 65
+    enabled: true

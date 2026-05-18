@@ -31,6 +31,14 @@ guard = Guard(policy_file="my_policy.yaml")
 | [`customer_support.yaml`](customer_support.yaml) | Support bots, helpdesks | 76 (moderate-strict) |
 | [`developer_tools.yaml`](developer_tools.yaml) | Code assistants, CI helpers | 86 (permissive) |
 | [`eu_ai_act_high_risk.yaml`](eu_ai_act_high_risk.yaml) | EU AI Act Annex III systems (effective 2026-08-02) | 55 (strict) |
+| [`gpai_provider.yaml`](gpai_provider.yaml) | EU AI Act Art. 53/55 General-Purpose AI providers | 55 (strict) |
+| [`kr_finance.yaml`](kr_finance.yaml) | 한국 금융권 — 신용정보법 · 전자금융감독규정 · 금융위 AI 가이드 | 55 (strict) |
+| [`kr_pipa.yaml`](kr_pipa.yaml) | 한국 개인정보보호법(PIPA) 범용 — 모든 산업 | 60 (strict) |
+| [`kr_isms_p.yaml`](kr_isms_p.yaml) | ISMS-P 인증 통제(2.6~2.12 AI 관련) | 55 (strict) |
+
+> 한국 규제 매핑 전체는 [`docs/compliance/KR_REGULATION_MAPPING.md`](../docs/compliance/KR_REGULATION_MAPPING.md) 참조.
+> `aig compliance --jurisdiction kr`로 53개 한국 규제 항목 매핑을 확인할 수 있습니다.
+> 금융사는 `kr_finance` + `kr_pipa` + `kr_isms_p` 조합 사용을 권장합니다.
 
 ## Customization
 
