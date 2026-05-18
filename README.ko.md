@@ -9,7 +9,15 @@
 </p>
 
 <p align="center">
-  <em>Claude Code / Cursor / FastAPI / LangChain 드롭인 — <code>pip install pyaigis && aigis init</code> 30초.</em>
+  <em>Claude Code / Cursor / FastAPI / LangChain 드롭인 — <code>pip install pyaigis-kr && aigis init</code> 30초.</em>
+</p>
+
+<p align="center">
+  <sub>
+    <strong>이 패키지는 <a href="https://github.com/killertcell428/aigis">pyaigis</a>의 한국 특화 fork입니다.</strong>
+    upstream의 모든 기능을 유지하면서 PIPA · 금융위 AI 가이드 · ISMS-P 대응을 추가합니다.
+    원본 영문 / 일문 사용자는 <code>pip install pyaigis</code>를 그대로 사용하시면 됩니다.
+  </sub>
 </p>
 
 <table align="center">
@@ -83,8 +91,10 @@
 ### 1. Python 라이브러리 (코드에 직접 통합)
 
 ```bash
-pip install pyaigis
+pip install pyaigis-kr
 ```
+
+> 패키지명은 `pyaigis-kr`이지만 import는 그대로 `from aigis import Guard`입니다 (upstream과 동일 모듈 트리).
 
 ```python
 from aigis import Guard
@@ -142,7 +152,7 @@ aig compliance --jurisdiction kr
 
 ### Aigis로 실제 얻는 것
 
-- **`pip install pyaigis && aigis init --agent claude-code`** 로 30초 만에 `.claude/hooks/`에 pre-tool-use 훅 주입. Claude Code의 Bash·Edit·Write·WebFetch가 모두 실행 전에 가로채집니다
+- **`pip install pyaigis-kr && aigis init --agent claude-code`** 로 30초 만에 `.claude/hooks/`에 pre-tool-use 훅 주입. Claude Code의 Bash·Edit·Write·WebFetch가 모두 실행 전에 가로채집니다
 - **코어 의존성 0**. Python 표준 라이브러리만으로 동작. FastAPI / LangChain / OpenAI / Anthropic 어댑터는 optional extras
 - **결정론적, LLM 판정 일절 없음**. API 비용 $0, 데이터 환경 외 유출 없음, 같은 입력 → 같은 출력
 - **MCP 3단 스캐너**(정의 + 호출 + 응답) ― 사용자가 "허가"한 **후에** 발동하는 rug-pull / shadowing을 잡는 유일한 OSS 방화벽
@@ -449,10 +459,10 @@ policy_templates/
 기여를 환영합니다. 상세는 [CONTRIBUTING.md](CONTRIBUTING.md) 참조.
 
 ```bash
-git clone https://github.com/killertcell428/aigis.git
-cd aigis
+git clone https://github.com/gaebalai/aigis-kr.git
+cd aigis-kr
 pip install -e ".[dev]"
-pytest  # 한국 패치 적용 시 1,654 tests 전체 통과
+pytest  # 한국 환경 통합 시 1,708 tests 전체 통과
 ```
 
 한국 환경 기여 가이드:

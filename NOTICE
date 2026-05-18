@@ -1,5 +1,21 @@
-Aigis
+pyaigis-kr
 Copyright 2026 Aigis contributors
 
 This product includes software developed by the Aigis project
-(https://github.com/killertcell428/aigis).
+(https://github.com/killertcell428/aigis), licensed under Apache 2.0.
+
+pyaigis-kr is a Korea-focused fork of pyaigis maintained at
+https://github.com/gaebalai/aigis-kr. It preserves the upstream API and
+behavior while adding:
+
+  - 53-item Korean regulation compliance mapping (PIPA, 신용정보법,
+    정보통신망법, 금융위 AI 가이드라인, 전자금융감독규정, ISMS-P)
+  - Korean financial and identity PII detectors (10 patterns)
+  - Korean prompt-injection patterns (11 patterns)
+  - Hangul jamo-split / NFKC normalization
+  - kr_finance / kr_pipa / kr_isms_p policy templates
+  - Python (CLI / HTTP server) and frontend (site, dashboard) Korean i18n
+
+Upstream changes are merged on a best-effort basis. The intended path is
+that Korean additions are eventually upstreamed; until then this fork is
+the publishing channel for the Korean compliance layer.

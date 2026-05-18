@@ -111,7 +111,7 @@ jobs:
       id-token: write   # PyPI Trusted Publishing (OIDC)
     environment:
       name: pypi
-      url: https://pypi.org/p/pyaigis
+      url: https://pypi.org/p/pyaigis-kr
 
     steps:
       - name: Download distributions
@@ -123,7 +123,10 @@ jobs:
       - name: Publish to PyPI
         uses: pypa/gh-action-pypi-publish@cef221092ed1bacb1cc03d23a2d87d1d172e277b # release/v1
         # No username/password needed — uses OIDC trusted publishing.
-        # Configure at: https://pypi.org/manage/project/pyaigis/settings/publishing/
+        # Configure at: https://pypi.org/manage/project/pyaigis-kr/settings/publishing/
+        # Trusted publisher must point to gaebalai/aigis-kr (not the upstream
+        # killertcell428/aigis) — the original pyaigis trusted publisher does
+        # not authorize this fork.
 
   # ── 3. GitHub Release with auto-changelog ─────────────────────────────────
   github-release:
@@ -177,11 +180,11 @@ jobs:
             fi
             echo "### Installation"
             echo '```bash'
-            echo "pip install pyaigis==${{ needs.build.outputs.version }}"
+            echo "pip install pyaigis-kr==${{ needs.build.outputs.version }}"
             echo '```'
             if [ -n "$PREV_TAG" ]; then
               echo ""
-              echo "**Full Changelog**: https://github.com/killertcell428/aigis/compare/${PREV_TAG}...${VERSION}"
+              echo "**Full Changelog**: https://github.com/gaebalai/aigis-kr/compare/${PREV_TAG}...${VERSION}"
             fi
             echo "CHANGELOG_EOF"
           } >> "$GITHUB_OUTPUT"

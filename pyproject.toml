@@ -3,10 +3,10 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "pyaigis"
+name = "pyaigis-kr"
 version = "1.1.4"
-description = "Zero-dependency Python firewall for AI agents. 4-wall + L4-L7 defense built on 2025-2026 LLM-security papers (Mirror, StruQ, MI9, MemoryGraft, MSB, DataFilter, AdvJudge-Zero), 44 compliance templates across US/CN/JP/EU. Library, Docker sidecar, or CLI — drop-in for Claude Code, Cursor, FastAPI, LangChain."
-readme = "README.md"
+description = "Korea-focused fork of pyaigis. Adds 53-item PIPA / 신용정보법 / 금융위 AI / 전자금융감독 / ISMS-P compliance mapping, Korean financial PII detectors (RRN, 외국인등록, 운전면허, 여권, 신용카드 BIN, 계좌, 건강보험), 11 Korean prompt-injection patterns, Hangul jamo-split normalization, kr_finance/kr_pipa/kr_isms_p policy templates, and Python+frontend Korean i18n — on top of the original pyaigis 4-wall + L4–L7 agent defense."
+readme = "README.ko.md"
 license = { file = "LICENSE" }
 requires-python = ">=3.11"
 keywords = [
@@ -16,6 +16,8 @@ keywords = [
     "langchain", "openai", "anthropic", "mcp",
     "mcp-security", "red-team", "mitre-atlas",
     "ai-firewall", "agent-security", "aigis",
+    "korea", "korean", "pipa", "isms-p", "fsc-ai",
+    "한국", "개인정보보호법", "금융위", "신용정보법",
 ]
 classifiers = [
     "Development Status :: 5 - Production/Stable",
@@ -50,7 +52,7 @@ anthropic = ["anthropic>=0.20.0"]
 
 # Full SaaS server (backend + all integrations)
 server = [
-    "pyaigis[yaml,fastapi,openai]",
+    "pyaigis-kr[yaml,fastapi,openai]",
     "uvicorn[standard]>=0.30.0",
     "sqlalchemy>=2.0.0",
     "alembic>=1.13.0",
@@ -68,11 +70,11 @@ server = [
 ]
 
 # Everything
-all = ["pyaigis[yaml,fastapi,langchain,openai,anthropic]"]
+all = ["pyaigis-kr[yaml,fastapi,langchain,openai,anthropic]"]
 
 # Development
 dev = [
-    "pyaigis[all]",
+    "pyaigis-kr[all]",
     "pytest>=8.2.0",
     "pytest-asyncio>=0.23.0",
     "pytest-cov>=5.0.0",
@@ -86,10 +88,11 @@ dev = [
 aigis = "aigis.cli:main"
 
 [project.urls]
-Homepage = "https://github.com/killertcell428/aigis"
-Documentation = "https://github.com/killertcell428/aigis#readme"
-Issues = "https://github.com/killertcell428/aigis/issues"
-Changelog = "https://github.com/killertcell428/aigis/releases"
+Homepage = "https://github.com/gaebalai/aigis-kr"
+Documentation = "https://github.com/gaebalai/aigis-kr/blob/master/README.ko.md"
+Issues = "https://github.com/gaebalai/aigis-kr/issues"
+Changelog = "https://github.com/gaebalai/aigis-kr/releases"
+Upstream = "https://github.com/killertcell428/aigis"
 
 [tool.hatch.build.targets.wheel]
 packages = ["aigis"]
