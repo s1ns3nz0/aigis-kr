@@ -14,6 +14,42 @@ what got documented across releases.
 
 ### Added
 
+- **`aigis/forwarders/`** — Tier-4 SIEM / log-lake forwarder layer that
+  mirrors every `ActivityEvent` to external systems (Splunk HEC, Elastic,
+  Microsoft Sentinel, Datadog, in-house ingest endpoints) for audit, insider
+  threat analytics, and SOC integration. Adds:
+
+  - `LogForwarder` abstract base with a bounded background queue, batching,
+    exception isolation, and a `Redactor` protocol that runs *before* the
+    schema mapper so 개인정보보호법 / GDPR data-minimization can strip rule
+    sample text before it leaves the process.
+  - `ECSMapper` (`aigis/forwarders/schema/ecs.py`) producing Elastic Common
+    Schema 8.11.0 documents — natively indexed by Elastic Security and Wazuh,
+    DCR-ingestible by Sentinel, and CIM-derivable for Splunk. Preserves
+    every Aigis-native field under an `aigis.*` namespace so analysts never
+    lose the original `matched_rules`, `owasp_refs`, `delegation_chain`,
+    `autonomy_level`, or policy `decision`.
+  - `HttpJsonForwarder` — stdlib-only HTTPS POST sink with NDJSON / array
+    body formats, optional gzip, configurable retries with exponential
+    backoff, and 4xx-vs-5xx-aware retry policy. Suitable for Splunk HEC,
+    Datadog Logs, Sentinel custom DCRs, and generic in-VPC ingest endpoints.
+  - `ActivityStream.add_forwarder()` / `remove_forwarder()` /
+    `close_forwarders()` registration API. The on-disk JSONL tiers
+    (local / global / alerts) remain authoritative — forwarders are mirrors,
+    never replacements, and a misbehaving SIEM cannot stop the agent.
+
+  Zero new required dependencies — the foundation, ECS mapper, and HTTPS
+  sink all use only the Python standard library, preserving Aigis' zero-dep
+  core. ISMS-P 2.9 (로그관리) / 2.11 (이상행위 분석) and 금융위 AI
+  가이드라인 "이상행위 탐지" mappings in `aigis/compliance_kr.py` can now
+  point to a real outbound integration path rather than local-only logs.
+
+  Tests: 14 new in `tests/test_forwarders.py` covering ECS field mapping,
+  HTTPS round-trip against an in-process collector, retry on 5xx,
+  gzip / NDJSON / array body formats, the `Redactor` protocol, bounded
+  queue degradation under load, and end-to-end `ActivityStream` integration
+  (including the broken-forwarder-must-not-break-record invariant).
+
 - **`benchmarks/oss_comparison/`** — Reproducible head-to-head benchmark vs
   LLM Guard, Guardrails AI, and NeMo Guardrails (closes the scaffolding for
   [#32](https://github.com/killertcell428/aigis/issues/32)). Ships:
